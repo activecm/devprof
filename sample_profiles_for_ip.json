@@ -1,0 +1,9 @@
+{
+    "system_profile_pairs": [
+	{"systems": ["10.0.0.1", "fe80::f60e:dead:beef:cafe", "192.168.0.0/24"], "profiles": ["sample_router", "sample_local_lan"]},
+	{"systems": ["10.0.0.64"], "profiles": ["sample_general_traffic", "sample_local_lan"]},
+	{"systems": ["10.2.7.1", "10.0.0.0/16", "10.0.0.0/24", "fe80::/16"], "profiles": ["sample_general_traffic", "sample_local_lan"]},
+	{"systems": ["172.16.12.1"], "profiles": ["sample_local_lan"]},
+	{"systems": ["0.0.0.0/0", "::/0"], "profiles": ["sample_general_traffic"]}
+    ]
+}

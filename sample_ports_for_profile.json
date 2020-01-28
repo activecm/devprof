@@ -1,0 +1,35 @@
+{
+	"sample_local_lan": {
+		"9:icmp:-":		[null, "100KB"],
+		"133:icmp:-":		[null, "100KB"],
+		"135:icmp:-":		[null, "1MB"],
+		"136:icmp:-":		[null, "100KB"],
+		"5355:udp:dns":		[null, "100KB"]
+	},
+	"sample_general_traffic": {
+		"1:icmp:-":		[null, "1MB"],
+		"3:icmp:-":		[null, "1MB"],
+		"11:icmp:-":		[null, "1MB"],
+		"21:tcp:ftp":		[null, "100KB"],
+		"53:tcp:-":		[null, "100KB"],
+		"53:tcp:dns":		[null, "100MB"],
+		"53:udp:dns":		[null, "1GB"],
+		"67:udp:dhcp":		[null, null],
+		"80:tcp:-":		[null, "1MB"],
+		"80:tcp:http":		[null, "10GB"],
+		"123:udp:-":		["100", "1MB"],
+		"443:udp:-":		[null, "1GB"],
+		"443:tcp:-":		[null, "1GB"],
+		"443:tcp:ssl":		[null, "1GB"],
+		"547:udp:-":		[null, "1MB"],
+		"5223:tcp:-":		[null, "100KB"],
+		"5223:tcp:ssl":		[null, "100KB"],
+		"5353:udp:dns":		[null, "10MB"],
+		":tcp:ftp-data": 	[null, "10MB"]
+	},
+	"sample_router": {
+		"67:udp:dhcp":		[null, null],
+		"546:udp:-":		[null, "10KB"],
+		"1900:udp:-":		[null, "10MB"]
+	}
+}
