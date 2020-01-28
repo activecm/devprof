@@ -1,0 +1,214 @@
+
+30 Second intro
+	devprof reads the amount of payload exchanged between hosts (from
+Bro or Zeek logs).  Based on limits set by the user, it reports on ports
+that are sharing too little or too much data in a 24 hour period.
+
+	Primary features:
+- If mac_logging is enable in Bro/Zeek, it reports on all IPs associated
+with a mac address and the manufacturer of the card.
+- A given IP address can be associated with one or more profiles (groups
+of ports along with their minimum and maximum limits).  This allows you
+to build the port requirements for a system in blocks, such as "linux",
+"ubuntu", "apache", and "production", or "devel_team", "macosx", and
+"system_scanner".
+
+
+Configuration files
+
+	devprof uses a "profile" as a decription of the allowed traffic
+for a system of a given type.  Here are some examples of profiles:
+
+"windows10": a Windows 10 system.  This profile would know about the
+types of traffic likely to be created by a windows 10 machine.
+
+"yyz_iot_camera": a particular model of IP camera on the network.
+
+"developer": Your development team members might have different traffic
+patterns than your other users; they may be allowed to make ssh
+connections, for example, when this is not allowed for everyone else.
+
+"bob": This particular user runs security checks against development
+machines, and as such is allowed to connect to more ports than others.
+
+	You're obviously welcome to use any organization that works for
+you, but you may want to consider some combination of operating system,
+hardware, user group, and/or specific user profiles like the above.
+
+
+	devprof is controlled by two configuration files, both stored in 
+$HOME/.config/devprof/ (you can change this directory with the "-c"
+option).
+
+profiles_for_ip.json
+
+	This file connects systems to profiles.  Here's an example:
+
+{"systems": ["172.16.12.1", "fe80::2/128"], "profiles": ["windows10", "background_noise"]},
+
+	Both 172.16.12.1 and fe80::2 are windows 10 systems, and the
+traffic we'd normally see from a windows 10 system will be accepted.
+
+
+	The above examples of profiles can be added together, so it's not
+unreasonable to have:
+
+{"systems": ["10.2.7.1", "10.0.0.0/16", "10.0.0.0/24", "c999:abd:0:12::/64"], "profiles": ["windows10", "developer", "background_noise"]},
+
+	, which says that the above IP address and subnets are all
+allowed to have both windows 10 and developer traffic, along with
+effectively ignoring reasonable amounts of background noise traffic..
+
+	We include the file sample_profiles_for_ip.json so you can see
+the format.
+
+
+ports_for_profile.json
+
+	So what kinds of things might you find in a profile?  Here are
+some examples:
+
+	"background_noise": {
+		"9:icmp:-":		[null, "100KB"],
+		"67:udp:dhcp":		[null, null],
+		"133:icmp:-":		[null, "100KB"],
+		"135:icmp:-":		[null, "1MB"],
+		"136:icmp:-":		[null, "100KB"],
+		"5355:udp:dns":		[null, "100KB"]
+	},
+
+
+	"developer": {
+		"21:tcp:ftp":		[null, "100KB"],
+		"53:tcp:-":		[null, "100KB"],
+		"53:tcp:dns":		[null, "100MB"],
+		"53:udp:dns":		[null, "1GB"],
+		"80:tcp:-":		[null, "1MB"],
+		"80:tcp:http":		[null, "10GB"],
+		"123:udp:-":		["100", "1MB"],
+		"443:udp:-":		[null, "1GB"],
+		"443:tcp:-":		[null, "1GB"],
+		"443:tcp:ssl":		[null, "1GB"],
+		":tcp:ftp-data": 	[null, "10MB"]
+	},
+
+	See below for more details about the port specifications and the
+associated size range.
+
+	These two files together allow you to 1) define your own profiles
+along with what you consider reasonable amounts of traffic, and 2)
+associate one or more profiles with specific IPv4 and/or IPv6 IP
+addresses and subnets.
+
+
+
+
+Port specification details
+	When specifying the port, match what Bro/Zeek is providing as a
+port specification.  If Bro lists "53:tcp:dns", use that, but be aware
+that sometimes Bro is not able to verify that the traffic on that port is
+actually DNS traffic.  You may also need to list "53:tcp:-" (possibly
+with a lower number of bytes in the hope that Bro recognizes most of it
+as DNS traffic).
+
+	Most protocols stay on a single port (such as DNS on port 53). 
+There are a few that run on almost any port; the worst offender is
+ftp-data which can show up on any tcp port.  In cases like this, you may
+want to switch from Bro's spec using a specific port:
+"1484:tcp:ftp-data"
+	to the form that no longer specifies a port:
+":tcp:ftp-data"
+	Note, you can only do this wildcarding with the port number, not
+any other field, and it needs to start with a colon like above.
+
+	If you have multiple forms, such as
+"22:tcp:ssh":	[None, "10MB"],
+"22:tcp:-":	[None, "1MB"],
+":tcp:ssh":	[None, 0],
+	we first try to match incoming traffic against the port-specific
+rules (lines 1 and 2), and if there isn't any for this system, we see if
+there's a wildcarded form (line 3).  Effectively this allows 10MB of ssh
+payload that Bro recognizes as ssh traffic, another 1MB of port 22
+traffic that Bro couldn't recognize as ssh, and we accept ssh running on
+any other port _and alert on it_ as this will exceed the "Maximum 0 bytes
+of payload" requirement.  It's a handy way to identify that someone has
+ssh running on a different port (though you'll have to go back to the Bro
+logs to find out which port that is).
+	This approach works fine when Bro can figure out the protocol
+name ("ssh", above), but we discourage using this approach when it can't
+(like ":tcp:-").
+
+
+Size range details
+	Next to each port key is a range of values for that type of
+traffic, such as:
+"123:udp:-":		["100", "1MB"],
+
+	This is read as "The combined amount of payload for port 123 over
+24 hours should be >= 100 bytes and <1,000,000 bytes.".  If 0-99 bytes or
+1000000 or more bytes of payload are found in udp port 123 packets, this
+will be listed as "out_of_range" for this particular IP address.
+
+	Either of the values can be "null".  If the left value (minimum)
+is null, there is no minimum requirement; there can be a total of 0 bytes
+of payload, or no udp port 123 traffic at all.  If the right value
+(maximum) is null we won't alert on "too much" payload.
+	Here are some practical examples of how to use these:
+
+This device should send at least 400 but no more than 3000 bytes of payload on UDP port 999:
+"999:udp:-"		["400", "3001"],
+
+This device should have some traffic on that port, but no requirement on how much:
+"999:udp:-"		["1", null],
+
+There should be no more than 1 megabyte of traffic on that port:
+"999:udp:-"		[null, "1MB"],
+
+There should be absolutely no payload traffic sent on that port:
+"999:udp:-"		[null, 0],
+
+This port should be totally ignored (don't care if there's any traffic at all or not):
+"999:udp:-"		[null, null],
+
+	If the same port specification shows up in 2 separate profiles, such as
+...
+	"devel_system": {
+		"22:tcp:ssh":		[null, "100MB"],
+		...
+	},
+	"server_backup": {
+		"22:tcp:ssh":		["1KB", null],
+		...
+	},
+...
+	and at least one IP has both of these profiles assigned to it,
+that IP will grab the more restrictive values for both minimum and
+maximum (in this case, ["1KB", "100MB"]).
+
+	We use "xMB" as x * 1000000, and "xMiB" as x * 1048576.  See
+https://en.wikipedia.org/wiki/Binary_prefix for more details.
+
+	All of the numbers placed as minimum or maximum are for a 24 hour
+period.  If less than 24 hours of logs are fed in, the number of bytes
+seen on a port is scaled up to a 24 hour period (4 hours of logs would
+have their byte counts multiplied by 6).  If more than 24 hours of logs
+are seen, the byte counts are scaled down to match 24 hours (if you feed
+in 60 hours of logs, each byte count will be divided by 2.5).  This means
+that all comparisons are "bytes seen in the equivalent of a day" to
+minimum and maximum values for a day of traffic.
+
+	This scaling happens automatically; the byte counts are
+multiplied by (24/number_of_logs).  If you know that these logs are not
+complete hours and wish to manually set the time covered, use the "-t"
+command line parameter to set the number of hours.  For example, if you
+know the first log of 4 only covered 15 minutes you can use "-t 3.25" to
+fix the time covered.
+
+	If you'd like to add a comment about what a port is, you can add
+a third column to the min/max list, changing:
+"135:icmp:-":           [null, "1MB"],
+	to
+"135:icmp:-":           [null, "1MB", "Neighbor solicitation"],
+	If you do this you'll want to keep an eye out as a future release
+might start using that third field.
+
